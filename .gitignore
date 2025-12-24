@@ -1,0 +1,14 @@
+# Ignore CSV data files
+CSV/
+*.csv
+
+# Django stuff
+__pycache__/
+*.pyc
+db.sqlite3
+
+# Environment
+.env
+
+# Static collected files
+staticfiles/

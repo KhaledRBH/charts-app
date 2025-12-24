@@ -1,0 +1,9 @@
+<h2>Select a Table</h2>
+<form method="get" action="{% url 'show_table' %}">
+  <select name="table_name">
+    {% for table in tables %}
+      <option value="{{ table }}">{{ table }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit">View Table</button>
+</form>

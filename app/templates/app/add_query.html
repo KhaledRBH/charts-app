@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Add Query</title>
+  <style>
+    body {
+      font-family: Arial;
+      background: #f5f6fa;
+      padding: 30px;
+    }
+    .box {
+      max-width: 700px;
+      margin: auto;
+      background: white;
+      padding: 25px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    input, textarea, button {
+      width: 100%;
+      padding: 10px;
+      margin-top: 10px;
+      font-size: 14px;
+    }
+    textarea {
+      min-height: 200px;
+      font-family: monospace;
+    }
+    button {
+      background: #007BFF;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #0056b3;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="box">
+    <h2>Add New Query</h2>
+
+    <form method="post">
+      {% csrf_token %}
+
+      <label>Query Name</label>
+      <input type="text" name="query_name" placeholder="e.g. 4G Sites Algeria" required>
+
+      <label>SQL Query</label>
+      <textarea name="query_text" placeholder="SELECT ... FROM ..." required></textarea>
+
+      <button type="submit">Save Query</button>
+    </form>
+  </div>
+</body>
+</html>
