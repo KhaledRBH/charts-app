@@ -244,7 +244,23 @@
 </script>
 
 <script>
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
+  // ---------------- LOAD FILTER VALUES FROM SERVER ----------------
+  let serverFilterValues = [];
+  async function loadFiltersFromServer() {
+    try {
+      const res = await fetch(
+        `{% url 'load_filter_values' %}?query_id=${QUERY_ID}`
+      );
+      const data = await res.json();
+      serverFilterValues = data.filters || [];
+    } catch (err) {
+      console.error("Failed to load filter values:", err);
+    }
+  }
+
+  await loadFiltersFromServer(); // ✅ Fetch all filter values before initializing filters
+
   const table = document.getElementById("data-table");
   if (!table) return;
 
@@ -268,12 +284,17 @@ document.addEventListener("DOMContentLoaded", () => {
     const colCount = table.querySelectorAll("th").length;
     const valuesPerCol = Array.from({ length: colCount }, () => new Set());
 
-    // Collect all unique values for each column
+    // Collect unique values for each column
     allRows.forEach(row => {
       [...row.children].forEach((cell, i) => {
         valuesPerCol[i].add(cell.textContent.trim() || "(empty)");
       });
     });
+
+    // Use server values for column 0 (first column) if available
+    if (serverFilterValues.length) {
+      serverFilterValues.forEach(val => valuesPerCol[0].add(val));
+    }
 
     // Initialize checkboxStates for each column
     for (let i = 0; i < colCount; i++) {
@@ -314,7 +335,7 @@ document.addEventListener("DOMContentLoaded", () => {
         list.appendChild(selectAllLabel);
 
         const allValues = Object.keys(checkboxStates[col]).sort();
-        const filteredValues = allValues.filter(val => 
+        const filteredValues = allValues.filter(val =>
           val.toLowerCase().includes(searchTerm.toLowerCase())
         );
 
@@ -381,46 +402,36 @@ document.addEventListener("DOMContentLoaded", () => {
       row.style.display = visible ? "" : "none";
     });
     
-    // Update export status
     updateExportStatus();
   }
 
   // ---------------- GET FILTERED DATA ----------------
   function getFilteredData() {
     const data = [];
-    
-    // Get column headers
-    const headers = Array.from(table.querySelectorAll("th")).map(th => 
+    const headers = Array.from(table.querySelectorAll("th")).map(th =>
       th.querySelector("span").textContent.trim()
     );
     data.push(headers);
-    
-    // Get filtered rows
+
     allRows.forEach(row => {
       if (row.style.display !== "none") {
-        const rowData = Array.from(row.querySelectorAll("td")).map(td => 
+        const rowData = Array.from(row.querySelectorAll("td")).map(td =>
           td.textContent.trim()
         );
         data.push(rowData);
       }
     });
-    
+
     return data;
   }
 
-  // ---------------- EXPORT TO CSV ----------------
+  // ---------------- EXPORT FUNCTIONS ----------------
   function exportToCSV() {
     const data = getFilteredData();
-    const csvContent = data.map(row => 
-      row.map(cell => {
-        // Escape quotes and wrap in quotes if contains comma, quote, or newline
-        if (/[",\n]/.test(cell)) {
-          return `"${cell.replace(/"/g, '""')}"`;
-        }
-        return cell;
-      }).join(',')
+    const csvContent = data.map(row =>
+      row.map(cell => /[",\n]/.test(cell) ? `"${cell.replace(/"/g, '""')}"` : cell).join(',')
     ).join('\n');
-    
+
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
@@ -430,25 +441,20 @@ document.addEventListener("DOMContentLoaded", () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    
-    document.getElementById("export-status").textContent = `Exported ${data.length - 1} rows to CSV`;
-    document.getElementById("export-status").style.color = "#28a745";
+
+    const statusEl = document.getElementById("export-status");
+    if (statusEl) {
+      statusEl.textContent = `Exported ${data.length - 1} rows to CSV`;
+      statusEl.style.color = "#28a745";
+    }
   }
 
-  // ---------------- EXPORT TO EXCEL ----------------
   function exportToExcel() {
-    // Alternative: Export as CSV with .xls extension (opens in Excel)
     const data = getFilteredData();
-    const csvContent = data.map(row => 
-      row.map(cell => {
-        if (/[",\n\t]/.test(cell)) {
-          return `"${cell.replace(/"/g, '""')}"`;
-        }
-        return cell;
-      }).join('\t')
+    const csvContent = data.map(row =>
+      row.map(cell => /[",\n\t]/.test(cell) ? `"${cell.replace(/"/g, '""')}"` : cell).join('\t')
     ).join('\n');
-    
-    // Add UTF-8 BOM for Excel compatibility
+
     const BOM = "\uFEFF";
     const blob = new Blob([BOM + csvContent], { type: 'application/vnd.ms-excel;charset=utf-8' });
     const link = document.createElement("a");
@@ -459,9 +465,12 @@ document.addEventListener("DOMContentLoaded", () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    
-    document.getElementById("export-status").textContent = `Exported ${data.length - 1} rows to Excel`;
-    document.getElementById("export-status").style.color = "#17a2b8";
+
+    const statusEl = document.getElementById("export-status");
+    if (statusEl) {
+      statusEl.textContent = `Exported ${data.length - 1} rows to Excel`;
+      statusEl.style.color = "#17a2b8";
+    }
   }
 
   // ---------------- UPDATE EXPORT STATUS ----------------
@@ -478,29 +487,27 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // ---------------- ADD SORTING FUNCTIONALITY ----------------
+  // ---------------- SORTING ----------------
   function addSorting() {
     const headers = table.querySelectorAll("th");
     headers.forEach((header, index) => {
       const span = header.querySelector("span");
       header.style.cursor = "pointer";
       header.title = "Click to sort";
-      
+
       header.addEventListener("click", () => {
-        // Update sort indicators
         headers.forEach(h => {
           const hSpan = h.querySelector("span");
           hSpan.textContent = hSpan.textContent.replace(/ [↑↓]$/, '');
         });
-        
-        if (sortColumn === index) {
-          sortDirection = -sortDirection;
-        } else {
+
+        if (sortColumn === index) sortDirection = -sortDirection;
+        else {
           sortColumn = index;
           sortDirection = 1;
         }
-        
-        span.textContent = span.textContent + (sortDirection === 1 ? ' ↑' : ' ↓');
+
+        span.textContent += sortDirection === 1 ? ' ↑' : ' ↓';
         sortTable(index);
       });
     });
@@ -508,24 +515,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function sortTable(columnIndex) {
     const rows = Array.from(tbody.querySelectorAll("tr"));
-    
+
     rows.sort((a, b) => {
       const aVal = a.children[columnIndex].textContent.trim();
       const bVal = b.children[columnIndex].textContent.trim();
-      
-      // Try numeric comparison
       const aNum = parseFloat(aVal.replace(/[^0-9.-]/g, ''));
       const bNum = parseFloat(bVal.replace(/[^0-9.-]/g, ''));
-      
-      if (!isNaN(aNum) && !isNaN(bNum)) {
-        return (aNum - bNum) * sortDirection;
-      }
-      
-      // String comparison
+
+      if (!isNaN(aNum) && !isNaN(bNum)) return (aNum - bNum) * sortDirection;
       return aVal.localeCompare(bVal) * sortDirection;
     });
-    
-    // Reorder in DOM
+
     const fragment = document.createDocumentFragment();
     rows.forEach(row => fragment.appendChild(row));
     tbody.appendChild(fragment);
@@ -541,10 +541,10 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  document.addEventListener("click", (e) => {
+  document.addEventListener("click", () => {
     document.querySelectorAll(".filter-menu").forEach(menu => {
       const filterBtn = menu.previousElementSibling;
-      if (!menu.contains(e.target) && !filterBtn.contains(e.target)) {
+      if (!menu.contains(event.target) && !filterBtn.contains(event.target)) {
         menu.classList.remove("active");
       }
     });
@@ -553,14 +553,9 @@ document.addEventListener("DOMContentLoaded", () => {
   // ---------------- EXPORT BUTTON LISTENERS ----------------
   const exportCsvBtn = document.getElementById("export-csv-btn");
   const exportExcelBtn = document.getElementById("export-excel-btn");
-  
-  if (exportCsvBtn) {
-    exportCsvBtn.addEventListener("click", exportToCSV);
-  }
-  
-  if (exportExcelBtn) {
-    exportExcelBtn.addEventListener("click", exportToExcel);
-  }
+
+  if (exportCsvBtn) exportCsvBtn.addEventListener("click", exportToCSV);
+  if (exportExcelBtn) exportExcelBtn.addEventListener("click", exportToExcel);
 
   // ---------------- INITIALIZE ----------------
   initFilters();
@@ -614,6 +609,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 });
 </script>
+
 
 </body>
 </html>

@@ -8,7 +8,7 @@ DB_USER = "postgres"
 DB_PASS = "rebouh123"
 DB_HOST = "localhost"
 DB_PORT = "5432"
-CSV_FOLDER = "D:\CSV"
+CSV_FOLDER = r"D:\CSV"  # Added 'r' for raw string to handle backslashes
 
 # 🧩 Connect to PostgreSQL
 conn = psycopg2.connect(
@@ -27,10 +27,14 @@ for filename in os.listdir(CSV_FOLDER):
             reader = csv.reader(f)
             headers = next(reader)
 
-            # Create table
+            # Create table if not exists
             columns = ", ".join([f'"{col}" TEXT' for col in headers])
             create_query = f'CREATE TABLE IF NOT EXISTS "{table_name}" ({columns});'
             cur.execute(create_query)
+            
+            # Clear existing data
+            truncate_query = f'TRUNCATE TABLE "{table_name}";'
+            cur.execute(truncate_query)
 
             # Insert data
             for row in reader:

@@ -79,11 +79,14 @@ WSGI_APPLICATION = 'charts.wsgi.application'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 DATABASES = {
-    "default": dj_database_url.parse(
-        os.environ.get("DATABASE_URL"),
-        conn_max_age=600,
-        ssl_require=True
-    )
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": "hichem",
+        "USER": "postgres",
+        "PASSWORD": "rebouh123",
+        "HOST": "localhost",
+        "PORT": "5432",
+    }
 }
 
 

@@ -25,59 +25,58 @@ def add_query(request):
 
 @login_required
 def execute_query(request):
-    queries = query.objects.all()
-    selected_id = request.GET.get("query_id")
-    condition = request.GET.get("condition", "").strip()
-    
-    rows, columns, error = [], [], None
-    page_size = 200
+    try:
+        queries = query.objects.all()  # <-- Make sure your model is Query
+        selected_id = request.GET.get("query_id")
+        condition = request.GET.get("condition", "").strip()
 
-    if selected_id:
-        q = query.objects.filter(id=selected_id).first()
-        if q:
-            try:
-                sql = q.query_text.strip().rstrip(";")
-                params = []
+        rows, columns, error = [], [], None
+        page_size = 200
 
-                # If user typed a condition
-                if condition:
-                    # Split by space to get multiple conditions
-                    conditions = [c.strip() for c in condition.split() if c.strip()]
-                    
-                    if conditions:
-                        # Build IN clause for multiple conditions
-                        placeholders = ', '.join(['%s'] * len(conditions))
-                        
-                        if "where" in sql.lower():
-                            sql += f' AND LEFT(a."name", 3) IN ({placeholders})'
+        if selected_id:
+            q = query.objects.filter(id=selected_id).first()
+            if q:
+                try:
+                    sql = q.query_text.strip().rstrip(";")
+                    params = []
+
+                    if condition:
+                        conditions = [c.strip() for c in condition.split() if c.strip()]
+                        if conditions:
+                            placeholders = ', '.join(['%s'] * len(conditions))
+                            if "where" in sql.lower():
+                                sql += f' AND LEFT(a."name", 3) IN ({placeholders})'
+                            else:
+                                sql += f' WHERE LEFT(a."name", 3) IN ({placeholders})'
+                            params.extend(conditions)
+
+                    sql += f" LIMIT {page_size} OFFSET 0"
+
+                    with connection.cursor() as cursor:
+                        if params:
+                            cursor.execute(sql, params)
                         else:
-                            sql += f' WHERE LEFT(a."name", 3) IN ({placeholders})'
-                        
-                        params.extend(conditions)
+                            cursor.execute(sql)
+                        columns = [col[0] for col in cursor.description]
+                        rows = cursor.fetchall()
 
-                # Add initial LIMIT
-                sql += f" LIMIT {page_size} OFFSET 0"
+                except Exception as e:
+                    error = str(e)
 
-                with connection.cursor() as cursor:
-                    if params:
-                        cursor.execute(sql, params)
-                    else:
-                        cursor.execute(sql)
+        return render(request, "app/execute_query.html", {
+            "queries": queries,
+            "selected_id": selected_id,
+            "columns": columns,
+            "rows": rows,
+            "condition": condition,
+            "error": error,
+        })
 
-                    columns = [col[0] for col in cursor.description]
-                    rows = cursor.fetchall()
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())  # <-- prints full error in console
+        return HttpResponse(f"Error: {str(e)}", status=500)
 
-            except Exception as e:
-                error = str(e)
-
-    return render(request, "app/execute_query.html", {
-        "queries": queries,
-        "selected_id": selected_id,
-        "columns": columns,
-        "rows": rows,
-        "condition": condition,
-        "error": error,
-    })
 
 @login_required
 def load_more_query_rows(request):
@@ -127,6 +126,33 @@ def load_more_query_rows(request):
 
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
+
+
+@login_required
+def load_filter_values(request):
+    query_id = request.GET.get("query_id")
+    if not query_id:
+        return JsonResponse({"filters": []})
+
+    q = query.objects.filter(id=query_id).first()
+    if not q:
+        return JsonResponse({"filters": []})
+
+    filters = []
+    try:
+        sql = q.query_text.strip().rstrip(";")
+
+        # Example: get DISTINCT LEFT(a."name", 3) values
+        # You might need to change 'a."name"' to the actual column you want
+        distinct_sql = f'SELECT DISTINCT {"name"} FROM ({sql}) AS subquery'
+
+        with connection.cursor() as cursor:
+            cursor.execute(distinct_sql)
+            filters = sorted([row[0] for row in cursor.fetchall() if row[0]])
+    except Exception as e:
+        print("Error loading filters:", e)
+
+    return JsonResponse({"filters": filters})
 
 
 
